@@ -1,5 +1,5 @@
 import { useCurrentAccount, useSuiClientQuery, useSignAndExecuteTransaction, useSuiClient } from "@mysten/dapp-kit";
-import { Flex, Heading, Text, Card, Grid, Button, Badge, TextField, Tabs, Separator } from "@radix-ui/themes";
+import { Flex, Heading, Text, Card, Grid, Button, Badge, TextField, Tabs, Separator, Select } from "@radix-ui/themes";
 import { useState } from "react";
 import { useNetworkVariable } from "../networkConfig";
 import { ListHero } from "../types/hero";
@@ -17,6 +17,8 @@ export default function SharedObjects({ refreshKey, setRefreshKey }: RefreshProp
   const [isChangingPrice, setIsChangingPrice] = useState<{ [key: string]: boolean }>({});
   const [newPrice, setNewPrice] = useState<{ [key: string]: string }>({});
   const { mutate: signAndExecute } = useSignAndExecuteTransaction();
+  const [filterOwner, setFilterOwner] = useState<"all" | "mine" | "others">("all");
+  const [sortBy, setSortBy] = useState<"price-asc" | "price-desc" | "power-desc" | "power-asc">("price-asc");
 
   const { data: adminCap } = useSuiClientQuery(
     "getOwnedObjects",
@@ -183,31 +185,81 @@ export default function SharedObjects({ refreshKey, setRefreshKey }: RefreshProp
 
 
   const listedHeroes = data.filter(obj => obj.data?.content && 'fields' in obj.data.content);
+  const normalizedHeroes = listedHeroes.map((obj) => {
+    const listHero = obj.data?.content as any;
+    const listHeroId = obj.data?.objectId!;
+    const fields = listHero.fields as ListHero;
+    const heroFields = fields.nft.fields;
+    const priceInSui = Number(fields.price) / 1_000_000_000;
+
+    return {
+      listHeroId,
+      fields,
+      heroFields,
+      priceInSui,
+    };
+  });
+
+  const filteredSortedHeroes = normalizedHeroes
+    .filter((item) => {
+      if (!account) return filterOwner === "others" ? false : true;
+      if (filterOwner === "mine") return item.fields.seller === account.address;
+      if (filterOwner === "others") return item.fields.seller !== account.address;
+
+      return true;
+    })
+    .sort((a, b) => {
+      if (sortBy === "price-asc") return a.priceInSui - b.priceInSui;
+      if (sortBy === "price-desc") return b.priceInSui - a.priceInSui;
+      if (sortBy === "power-desc") return Number(b.heroFields.power) - Number(a.heroFields.power);
+
+      return Number(a.heroFields.power) - Number(b.heroFields.power);
+    });
 
   return (
     <Flex direction="column" gap="4">
       <Flex justify="between" align="center">
-        <Heading size="6">Hero Marketplace ({listedHeroes.length})</Heading>
+        <Heading size="6">Hero Marketplace ({filteredSortedHeroes.length})</Heading>
         {isAdmin && (
           <Badge color="red" size="2">
             Admin Panel Active
           </Badge>
         )}
       </Flex>
+      <Flex gap="3" align="center" wrap="wrap">
+        <Flex align="center" gap="2">
+          <Text size="2" color="gray">Filter</Text>
+          <Select.Root value={filterOwner} onValueChange={(value) => setFilterOwner(value as typeof filterOwner)}>
+            <Select.Trigger />
+            <Select.Content>
+              <Select.Item value="all">All listings</Select.Item>
+              <Select.Item value="mine">My listings</Select.Item>
+              <Select.Item value="others">Others</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </Flex>
+        <Flex align="center" gap="2">
+          <Text size="2" color="gray">Sort</Text>
+          <Select.Root value={sortBy} onValueChange={(value) => setSortBy(value as typeof sortBy)}>
+            <Select.Trigger />
+            <Select.Content>
+              <Select.Item value="price-asc">Price: low → high</Select.Item>
+              <Select.Item value="price-desc">Price: high → low</Select.Item>
+              <Select.Item value="power-desc">Power: high → low</Select.Item>
+              <Select.Item value="power-asc">Power: low → high</Select.Item>
+            </Select.Content>
+          </Select.Root>
+        </Flex>
+      </Flex>
       
-      {listedHeroes.length === 0 ? (
+      {filteredSortedHeroes.length === 0 ? (
         <Card>
-          <Text>No heroes are currently listed for sale</Text>
+          <Text>No heroes match the selected filters</Text>
         </Card>
       ) : (
         <Grid columns="3" gap="4">
-          {listedHeroes.map((obj) => {
-            const listHero = obj.data?.content as any;
-            const listHeroId = obj.data?.objectId!;
-            const fields = listHero.fields as ListHero;
-            const heroFields = fields.nft.fields;
-            const priceInSui = Number(fields.price) / 1_000_000_000;
-
+          {filteredSortedHeroes.map((item) => {
+            const { listHeroId, fields, heroFields, priceInSui } = item;
             return (
               <Card key={listHeroId} style={{ padding: "16px" }}>
                 <Flex direction="column" gap="3">

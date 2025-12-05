@@ -143,6 +143,10 @@ In your deployed application:
 ⚠️ **Never share your private key with anyone**
 ⚠️ **Use testnet addresses for development and testing**
 
+### Extra feature
+
+- Added marketplace filters (all / my / others) plus sorting (price and power, ascending or descending) to quickly find relevant hero listings without extra clicks.
+
 ## 🎯 Success Criteria
 
 Your project is complete when:
